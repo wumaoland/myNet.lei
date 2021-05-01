@@ -21,7 +21,7 @@ class RegoNet(nn.Module):
     ) -> None:
         super(RegoNet, self).__init__()
         if layers is None:
-            layers = [2, 2]
+            layers = [2, 2, 2, 2]
         if init_weights is None:
             warnings.warn('The default weight initialization of GoogleNet will be changed in future releases of '
                           'torchvision. If you wish to keep the old behavior (which leads to long initialization times'
@@ -37,14 +37,21 @@ class RegoNet(nn.Module):
         self.maxpool2 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
 
         self.layer1 = ResidualBlock.ResidualBlock1()
-        params1 = [512, 160, 112, 224, 24, 64, 64]
-        self.layer2 = self._make_layer(ResidualBlock.ResidualBlock2, params1, layers[0])
-        params2 = [512, 128, 128, 256, 24, 64, 64]
-        self.layer3 = self._make_layer(ResidualBlock.ResidualBlock2, params2, layers[1])
-        self.layer4 = ResidualBlock.ResidualBlock3()
+
+        params1 = [480, 144, 96, 208, 16, 48, 64]
+        params2 = [156, 100, 200, 24, 48, 64]
+        self.layer2_1 = self._make_layer(ResidualBlock.ResidualBlock2, params1, params2, layers[0])
+        params3 = [480, 160, 112, 224, 24, 64, 64]
+        params4 = [196, 144, 288, 32, 64, 64]
+        self.layer2_2 = self._make_layer(ResidualBlock.ResidualBlock2, params3, params4, layers[1])
+        params5 = [480, 312, 196, 392, 64, 128, 64]
+        params6 = [200, 256, 512, 128, 256, 64]
+        self.layer2_3 = self._make_layer(ResidualBlock.ResidualBlock2, params5, params6, layers[2])
+
+        self.layer3 = ResidualBlock.ResidualBlock3()
 
         self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(1024, num_classes)
+        self.fc = nn.Linear(832, num_classes)
 
         if init_weights:
             self._initialize_weights()
@@ -73,15 +80,17 @@ class RegoNet(nn.Module):
     def _make_layer(
             self,
             block: Type[ResidualBlock.ResidualBlock2],
-            params: List[int],
+            params1: List[int],
+            params2: List[int],
             blocks: int = 1,
             conv_block: Optional[Callable[..., nn.Module]] = None
     ) -> nn.Sequential:
-        assert len(params) == 7
+        assert len(params1) == 7
+        assert len(params2) == 6
 
         layers = []
         for _ in range(0, blocks):
-            layers.append(block(params, conv_block))
+            layers.append(block(params1, params2, conv_block))
 
         return nn.Sequential(*layers)
 
@@ -99,12 +108,14 @@ class RegoNet(nn.Module):
 
         # N x 512 x 14 x 14
         x = self.layer1(x)
+
         # N x 512 x 14 x 14
-        x = self.layer2(x)
+        x = self.layer2_2(x)
         # N x 512 x 14 x 14
-        x = self.layer3(x)
+        x = self.layer2_3(x)
+
         # N x 1024 x 7 x 7
-        x = self.layer4(x)
+        x = self.layer3(x)
 
         # N x 1024 x 1 x 1
         x = torch.flatten(x, 1)
