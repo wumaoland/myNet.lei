@@ -36,22 +36,32 @@ class RegoNet(nn.Module):
         self.conv3 = BasicConv2d(64, 192, kernel_size=3, padding=1)
         self.maxpool2 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
 
-        self.layer1 = ResidualBlock.ResidualBlock1()
+        params1a = [192, 64, 96, 128, 16, 32, 32]
+        params1b = [128, 128, 192, 32, 96, 64]
+        self.layer1 = ResidualBlock.UpSample(params1a, params1b)
 
-        params1 = [480, 144, 96, 208, 16, 48, 64]
-        params2 = [156, 100, 200, 24, 48, 64]
-        self.layer2_1 = self._make_layer(ResidualBlock.ResidualBlock2, params1, params2, layers[0])
-        params3 = [480, 160, 112, 224, 24, 64, 64]
-        params4 = [196, 144, 288, 32, 64, 64]
-        self.layer2_2 = self._make_layer(ResidualBlock.ResidualBlock2, params3, params4, layers[1])
-        params5 = [480, 312, 196, 392, 64, 128, 64]
-        params6 = [200, 256, 512, 128, 256, 64]
-        self.layer2_3 = self._make_layer(ResidualBlock.ResidualBlock2, params5, params6, layers[2])
+        params2_1a = [480, 144, 96, 208, 16, 48, 64]
+        params2_1b = [156, 100, 200, 24, 48, 64]
+        self.layer2_1 = self._make_layer(ResidualBlock.ResidualBlock2, params2_1a, params2_1b, layers[0])
+        params2_2a = [480, 160, 112, 224, 24, 64, 64]
+        params2_2b = [196, 144, 288, 32, 64, 64]
+        self.layer2_2 = self._make_layer(ResidualBlock.ResidualBlock2, params2_2a, params2_2b, layers[1])
+        params2_3a = [480, 312, 196, 392, 64, 128, 64]
+        params2_3b = [200, 256, 512, 128, 256, 64]
+        self.layer2_3 = self._make_layer(ResidualBlock.ResidualBlock2, params2_3a, params2_3b, layers[2])
 
-        self.layer3 = ResidualBlock.ResidualBlock3()
+        params3a = [480, 112, 144, 288, 32, 64, 64]
+        params3b = [256, 160, 320, 32, 128, 128]
+        self.layer3 = ResidualBlock.UpSample(params3a, params3b)
+
+        params4_1a = [832, 256, 160, 320, 32, 128, 128]
+        params4_1b = [384, 192, 384, 48, 128, 128]
+        self.layer4_1 = self._make_layer(ResidualBlock.ResidualBlock2, params4_1a, params4_1b, layers[3])
 
         self.dropout = nn.Dropout(0.5)
-        self.fc = nn.Linear(832, num_classes)
+        # self.fc = nn.Linear(832, num_classes)
+        self.fc = BasicConv2d(832, num_classes, kernel_size=1)
+        self.relu = nn.ReLU(inplace=True)
 
         if init_weights:
             self._initialize_weights()
@@ -95,33 +105,26 @@ class RegoNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
-        # N x 3 x 224 x 224
         x = self.conv1(x)
-        # N x 64 x 112 x 112
         x = self.maxpool1(x)
-        # N x 64 x 56 x 56
         x = self.conv2(x)
-        # N x 64 x 56 x 56
         x = self.conv3(x)
-        # N x 192 x 56 x 56
         x = self.maxpool2(x)
 
-        # N x 512 x 14 x 14
         x = self.layer1(x)
-
-        # N x 512 x 14 x 14
+        x = self.layer2_1(x)
+        self.dropout(x)
         x = self.layer2_2(x)
-        # N x 512 x 14 x 14
+        self.dropout(x)
         x = self.layer2_3(x)
+        self.dropout(x)
 
-        # N x 1024 x 7 x 7
         x = self.layer3(x)
-
-        # N x 1024 x 1 x 1
-        x = torch.flatten(x, 1)
-        # N x 1024
+        x = self.layer4_1(x)
         x = self.dropout(x)
+
         x = self.fc(x)
+        x = torch.flatten(x, 1)
 
         return x
 
